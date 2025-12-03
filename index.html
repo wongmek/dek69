@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบแจ้งห้องสอบและเลขที่นั่งสอบ</title>
+    <!-- โหลด Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* * Note on Font: The requested 'LMF Americano' font is a custom font 
+         * and must be hosted/loaded via @font-face. For this example, we use 
+         * 'Sarabun' (a clean Thai font) as a suitable modern fallback.
+         * หากต้องการใช้ LMF Americano ต้องเพิ่มโค้ด @font-face เพื่อโหลดไฟล์ font (เช่น WOFF/TTF) 
+        */
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700;800&display=swap'); 
+
+        body {
+            font-family: 'LMF Americano', 'Sarabun', 'Tahoma', sans-serif;
+            background-color: #f0f4f8; /* สีพื้นหลังโทนอ่อน */
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6; /* Blue 500 */
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* ซ่อนส่วนที่ไม่ต้องการพิมพ์ */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            /* จัดหน้ากระดาษให้เป็น A4 เมื่อพิมพ์ */
+            body, .print-container {
+                width: 210mm; /* A4 width */
+                min-height: 297mm; /* A4 height */
+                margin: 0;
+                padding: 0;
+            }
+            /* จัดรูปแบบบัตรสอบสำหรับการพิมพ์ */
+            .exam-card-wrapper {
+                box-shadow: none !important;
+                border: 1px solid #000;
+                padding: 1.5rem !important;
+                margin: 1.5rem auto !important;
+            }
+            /* สำคัญ: บังคับให้ Student Info และ Photo อยู่ในบรรทัดเดียวกันเสมอ */
+            .print-flex-row {
+                display: flex !important;
+                flex-wrap: nowrap !important;
+                align-items: flex-start !important; /* จัดให้อยู่ด้านบน */
+            }
+            .print-info-col {
+                width: 75% !important;
+                padding-right: 1.5rem !important; /* เว้นระยะขวา */
+            }
+            .print-photo-col {
+                width: 25% !important;
+                justify-content: flex-end !important;
+                margin-top: 0 !important; /* ยกเลิก margin ที่มาจาก mobile view */
+            }
+            .print-info-col > div {
+                 /* เพิ่มช่องว่างด้านล่างของแต่ละบรรทัดข้อมูล */
+                margin-bottom: 0.2rem !important;
+            }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="app" class="max-w-4xl mx-auto">
+
+        <!-- ************************************************************ -->
+        <!-- NEW: HEADER BANNER (ส่วนหัว/โลโก้) - Modern Minimalist Design -->
+        <!-- ************************************************************ -->
+        <header class="no-print bg-white p-6 md:p-10 rounded-xl shadow-2xl mb-8 border-b-4 border-blue-600">
+            <div class="flex flex-col md:flex-row items-center justify-between">
+                
+                <!-- Logo 1 (Left) -->
+             <img src="https://img5.pic.in.th/file/secure-sv1/PSUWIT.png" 
+                     alt="Logo โรงเรียน 1" 
+                     id="school-logo-1" 
+                     class="w-16 h-16 md:w-20 md:h-20 object-contain mb-4 md:mb-0 rounded-full shadow-lg"
+                     onerror="this.onerror=null;this.src='https://placehold.co/80x80/2563EB/FFFFFF?text=L1_Error'; console.error('Error loading Logo 1. Check if the URL is a direct link.');">
+                <!-- IMPORTANT: Replace the src above with your PUBLIC logo URL 1 -->
+                
+                <!-- Title Section -->
+                <div class="text-center md:mx-6 flex-grow">
+                    <h1 class="text-3xl md:text-4xl font-extrabold text-gray-800 tracking-tight">
+                        ระบบแจ้งห้องสอบและเลขที่นั่งสอบ
+                    </h1>
+                    <p class="text-md text-blue-600 font-semibold mt-1">
+                        PSU Wittayanusorn School | เอกสารการสอบ ปีการศึกษา 2569
+                    </p>
+                </div>
+
+                <!-- Logo 2 (Right) -->
+                <img src="https://img2.pic.in.th/pic/PSUWIT_Circle.png" 
+                     alt="Logo โรงเรียน 2" 
+                     id="school-logo-2" 
+                     class="w-16 h-16 md:w-20 md:h-20 object-contain mt-4 md:mt-0 shadow-lg">
+                <!-- IMPORTANT: Replace the src above with your PUBLIC logo URL 2 -->
+
+            </div>
+        </header>
+
+        <!-- ส่วนค้นหา (No Print) - Minimalist Input Section -->
+        <div id="search-section" class="no-print bg-white p-6 md:p-10 rounded-xl shadow-2xl mb-8">
+            <h2 class="text-xl md:text-2xl font-bold text-center text-gray-700 mb-6 pb-4">
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 inline-block mr-2 text-blue-600">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 9h2.25M15 12h2.25m-2.25 4.5H19.5m-8.25-4.5H12M4.5 9h7.5m-7.5 3h7.5m-7.5 3h7.5m-7.5 3h7.5M5.25 5.25h13.5a2.25 2.25 0 012.25 2.25v10.5a2.25 2.25 0 01-2.25 2.25H5.25a2.25 2.25 0 01-2.25-2.25V7.5a2.25 2.25 0 012.25-2.25z" />
+                </svg>
+                กรุณาระบุเลขบัตรประจำตัวประชาชน
+            </h2>
+
+            <!-- Input Field -->
+            <div class="mb-6">
+                <label for="idNumber" class="sr-only">
+                    เลขบัตรประจำตัวประชาชน (13 หลัก)
+                </label>
+                <input type="text" id="idNumber" maxlength="13" placeholder="กรุณากรอกตัวเลข 13 หลักเพื่อค้นหา"
+                       class="w-full p-4 border-2 border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500 text-lg transition duration-200 shadow-inner"
+                       oninput="this.value = this.value.replace(/[^0-9]/g, '');" />
+            </div>
+
+            <!-- Search Button with Loading Spinner -->
+            <button id="searchButton"
+                    class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg transition duration-300 transform hover:scale-[1.01] flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    onclick="fetchExamData()">
+                <div id="search-text" class="flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 inline-block mr-2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg>
+                    ค้นหาข้อมูล
+                </div>
+                <div id="loading-spinner" class="hidden flex items-center">
+                    <div class="spinner mr-2"></div>
+                    กำลังค้นหา...
+                </div>
+            </button>
+
+            <!-- Loading & Error Message -->
+            <div id="message" class="mt-4 text-center p-3 rounded-xl hidden border"></div>
+        </div>
+
+        <!-- ส่วนแสดงผลบัตรสอบ (Printable) -->
+        <div id="exam-card-wrapper" class="hidden print-container">
+            <div id="exam-card" class="exam-card-wrapper bg-white p-6 md:p-12 rounded-xl shadow-2xl border border-gray-200">
+                
+                <!-- Header Section for PRINTING -->
+                <header class="flex justify-between items-start border-b-2 border-blue-600 pb-4 mb-4">
+                    <div class="flex items-center">
+                        <!-- Logo Placeholder: Use a suitable image URL or SVG -->
+                        <img src="https://img5.pic.in.th/file/secure-sv1/PSUWIT.png" alt="Logo" class="w-12 h-12 mr-4 object-contain rounded-lg">
+                        <div>
+                            <p class="text-xs text-gray-600">เอกสารการสอบ 2569</p>
+                            <p class="text-xl font-extrabold text-blue-800">PSU Wittayanusorn School</p>
+                            <p class="text-xs text-gray-500">424/18 ถ.กาญจนวนิช ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา</p>
+                        </div>
+                    </div>
+                </header>
+
+                <h2 class="text-2xl font-black text-center mb-6 text-gray-900">บัตรประจำตัวผู้เข้าสอบ</h2>
+
+                <!-- Exam ID Box -->
+                <section class="border border-red-500 bg-red-50 p-4 rounded-xl mb-6 max-w-sm mx-auto shadow-md">
+                    <div class="flex justify-between items-center text-lg font-bold">
+                        <span class="text-red-700">รหัสประจำตัวสอบ:</span>
+                        <span id="display-student-id" class="text-red-700 font-extrabold text-2xl"></span>
+                    </div>
+                </section>
+
+                <!-- Student Info & Photo Section (Use print-flex-row for print fix) -->
+                <section class="text-gray-700 mb-6 flex flex-wrap print-flex-row">
+                    <!-- Student Info Column (Left 75%) -->
+                    <div class="w-full lg:w-3/4 pr-0 lg:pr-6 space-y-3 text-base print-info-col">
+                        <div class="flex items-center">
+                            <span class="w-32 font-medium text-gray-600">บัตรประชาชน:</span>
+                            <span id="display-id-number" class="font-semibold text-gray-800"></span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="w-32 font-medium text-gray-600">ชื่อ-นามสกุล:</span>
+                            <span id="display-name" class="font-bold text-lg text-gray-900"></span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="w-32 font-medium text-gray-600">ประเภทสมัคร:</span>
+                            <span id="display-type" class="font-medium text-blue-700"></span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="w-32 font-medium text-gray-600">รหัสสอบ:</span>
+                            <span id="display-exam-id" class="font-extrabold text-red-700"></span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="w-32 font-medium text-gray-600">สถานที่:</span>
+                            <span id="display-location" class="font-semibold"></span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="w-32 font-medium text-gray-600">ห้องสอบ:</span>
+                            <span id="display-room" class="font-extrabold text-xl text-green-700"></span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="w-32 font-medium text-gray-600">เลขที่นั่ง:</span>
+                            <span id="display-seat" class="font-extrabold text-xl text-green-700"></span>
+                        </div>
+                    </div>
+
+                    <!-- Photo Placeholder Column (Right 25%) -->
+                    <div class="w-full lg:w-1/4 mt-4 lg:mt-0 flex justify-center lg:justify-end print-photo-col">
+                        <div class="w-32 h-40 border-2 border-gray-400 bg-gray-50 flex flex-col items-center justify-center text-xs text-gray-600 rounded-lg shadow-inner p-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8 text-gray-400 mb-1">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.3 2.3 0 018.43 4.5h7.14a2.3 2.3 0 011.603 1.675m-8.685 7.65c-.77.834-1.25 1.9-1.25 3.125a4.375 4.375 0 008.75 0c0-1.225-.48-2.29-1.25-3.125m-6.25 0V9.375a3.125 3.125 0 016.25 0v3.75m-6.25 0H12a2.3 2.3 0 00-2.3 2.3v3.2a.5.5 0 00.5.5h6.6a.5.5 0 00.5-.5v-3.2a2.3 2.3 0 00-2.3-2.3h-.75m-6.25 0a3.125 3.125 0 016.25 0v3.75m-6.25 0H12" />
+                            </svg>
+                            กรอบรูปถ่าย 1 นิ้ว
+                        </div>
+                    </div>
+                </section>
+                
+                <p class="text-right text-sm italic text-gray-500 border-t border-dashed border-gray-300 pt-2">ลงชื่อผู้สอบ ....................................................</p>
+
+                <!-- Instructions Section -->
+                <section class="mt-8 border-t border-gray-300 pt-4">
+                    <h3 class="font-bold text-lg mb-2 text-blue-800">ข้อปฏิบัติสำหรับผู้เข้าสอบ</h3>
+                    <ol class="list-decimal pl-5 space-y-1 text-xs text-gray-700">
+                        <li>ทยอยมาถึงสนามสอบภายในเวลา 08:00 น. (ผู้ปกครองส่งนักเรียนหน้าสนามสอบ)</li>
+                        <li>แสดงบัตรประจำตัวประชาชน ,  บัตรประจำตัวสอบติดรูปถ่ายนักเรียนขนาด 1 นิ้ว 
+                        (รูปถ่ายหน้าตรง สามารถพริ้นรูปมาติดได้)
+                        </li>
+                        <li>นำอาหารกลางวันและน้ำดื่ม เพื่อรับประทานอาหารกลางวัน แสดงก่อนเข้าสนามสอบ</li>
+                        <li>เวลา 09:00 – 12:00 น.  สอบวิชาวิทยาศาสตร์และคณิตศาสตร์</li>
+                         <li>เวลา 12:00 – 13:00 น.  รับประทานอาหารกลางวันในห้องสอบ</li>
+                        <li>เวลา 13:30 – 16:30 น.  สอบวิชาภาษาไทย ภาษาอังกฤษ และความรู้ทั่วไป</li>
+                    </ol>
+                      <h3 class="font-bold text-lg mb-2 text-blue-800">กำหนดการสอบและประกาศผลสอบ</h3>
+                    <ol class="list-disc pl-5 space-y-1 text-xs text-gray-700">
+                        <li>วันเสาร์ที่ 13 ธันวาคม 2568 : สอบคัดเลือกระดับชั้นมัธยมศึกษาปีที่ 1 และทดสอบความรู้ชั้น ป.5</li>
+                        <li>วันอาทิตย์ที่ 14 ธันวาคม 2568 : สอบคัดเลือกระดับชั้นมัธยมศึกษาปีที่ 4 และทดสอบความรู้ชั้น ม.2</li>
+                        <li>วันพฤหัสบดีที่ 25 ธันวาคม 2568 : ประกาศผลการสอบ ม.1 และ ม.4 ทาง www.psuwit.ac.th และเพจโรงเรียน</li>
+                        <li>วันพฤหัสบดีที่ 15 มกราคม 2569 : ประกาศผลการทดสอบความรู้ ป.5 และ ม.2 ทาง www.psuwit.ac.th และเพจโรงเรียน</li>
+                    </ol>
+                </section>
+
+                <!-- Table of Exam/Seat numbers (Bottom Section) -->
+                <section class="mt-8 pt-4 border-t border-dashed border-gray-400">
+                    <table class="w-full border-collapse border border-gray-400 text-sm md:text-base rounded-lg overflow-hidden">
+                        <thead>
+                            <tr class="bg-blue-100 text-blue-800">
+                                <th class="border border-gray-400 p-3 font-semibold text-center w-1/3">รหัสประจำตัวสอบ</th>
+                                <th class="border border-gray-400 p-3 font-semibold text-center w-1/3">ห้องสอบ</th>
+                                <th class="border border-gray-400 p-3 font-semibold text-center w-1/3">เลขที่นั่งสอบ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td id="table-exam-id" class="border border-gray-400 p-3 text-center font-bold text-red-700"></td>
+                                <td id="table-room" class="border border-gray-400 p-3 text-center font-bold text-green-700 text-lg"></td>
+                                <td id="table-seat" class="border border-gray-400 p-3 text-center font-bold text-green-700 text-lg"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <!-- Footer Note -->
+                <p class="text-xs text-gray-500 mt-4 text-center">
+                    หมายเหตุ: ข้อมูลนี้เป็นข้อมูลการแจ้งห้องสอบและเลขที่นั่งสอบเพื่อเป็นหลักฐานในการเข้าสอบ กรุณาตรวจสอบความถูกต้องอีกครั้ง
+                </p>
+
+            </div>
+        </div>
+
+        <!-- Print Button (No Print) -->
+        <div id="print-section" class="no-print hidden mt-6 text-center">
+            <button id="printButton"
+                    class="py-3 px-8 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-lg transition duration-200 transform hover:scale-[1.01]"
+                    onclick="window.print()">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 inline-block mr-2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 8V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 2l-3 3m0 0l3 3m-3-3h12a2 2 0 002-2V8a2 2 0 00-2-2H8a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-3" />
+                </svg>
+                พิมพ์บัตรสอบ (PDF)
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // *** สำคัญ: กรุณาเปลี่ยน URL นี้เป็น URL ที่ได้จากการ Deploy Google Apps Script ของคุณ ***
+        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxw3pmbXRWtYX42HreyV4kPxHh6wq4BxJjV74pYDhUzRpojsfq1vWNX8WXpzZNzpPYMaA/exec";
+
+        const idInput = document.getElementById('idNumber');
+        const searchButton = document.getElementById('searchButton');
+        const searchButtonText = document.getElementById('search-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const messageBox = document.getElementById('message');
+        const examCardWrapper = document.getElementById('exam-card-wrapper');
+        const printSection = document.getElementById('print-section');
+        
+        // ฟังก์ชันสำหรับแสดงข้อความสถานะ/ข้อผิดพลาด
+        function showMessage(text, isError = false) {
+            messageBox.textContent = text;
+            messageBox.classList.remove('hidden', 'bg-red-100', 'bg-green-100', 'text-red-700', 'text-green-700', 'border-red-400', 'border-green-400');
+            if (isError) {
+                messageBox.classList.add('bg-red-100', 'text-red-700', 'border-red-400');
+            } else {
+                messageBox.classList.add('bg-green-100', 'text-green-700', 'border-green-400');
+            }
+        }
+
+        // ฟังก์ชันสำหรับซ่อนบัตรสอบ
+        function hideExamCard() {
+            examCardWrapper.classList.add('hidden');
+            printSection.classList.add('hidden');
+        }
+
+        // ฟังก์ชันจัดการสถานะ Loading
+        function setLoading(isLoading) {
+            searchButton.disabled = isLoading;
+            if (isLoading) {
+                searchButtonText.classList.add('hidden');
+                loadingSpinner.classList.remove('hidden');
+            } else {
+                searchButtonText.classList.remove('hidden');
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        // ฟังก์ชันดึงข้อมูลจาก Apps Script
+        async function fetchExamData() {
+            const idNumber = idInput.value.trim();
+            hideExamCard();
+            messageBox.classList.add('hidden');
+
+            if (idNumber.length !== 13) {
+                showMessage("กรุณากรอกเลขบัตรประจำตัวประชาชนให้ครบ 13 หลัก", true);
+                return;
+            }
+
+            setLoading(true);
+
+            const url = `${GAS_WEB_APP_URL}?id=${idNumber}`;
+
+            try {
+                // Fetch API Call with Exponential Backoff for stability
+                let response;
+                let data;
+                const MAX_RETRIES = 3;
+                let delay = 1000;
+
+                for (let i = 0; i < MAX_RETRIES; i++) {
+                    try {
+                        response = await fetch(url, { method: 'GET' });
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                        data = await response.json();
+                        break; // Success, break the loop
+                    } catch (e) {
+                        if (i === MAX_RETRIES - 1) throw e;
+                        console.error(`Fetch attempt ${i + 1} failed, retrying in ${delay / 1000}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; // Exponential backoff
+                    }
+                }
+                
+                if (data.status === 'success') {
+                    // แสดงข้อมูล
+                    updateExamCard(data.data);
+                    showMessage("ค้นหาข้อมูลสำเร็จ", false);
+                } else {
+                    // แสดงข้อผิดพลาดจาก Apps Script
+                    showMessage(data.message || "ไม่พบข้อมูลผู้เข้าสอบสำหรับเลขบัตรฯ นี้", true);
+                }
+
+            } catch (error) {
+                console.error("Fetch Error:", error);
+                showMessage("เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์ กรุณาลองใหม่อีกครั้ง", true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // ฟังก์ชันอัปเดตข้อมูลบนบัตรสอบ
+        function updateExamCard(data) {
+            document.getElementById('display-student-id').textContent = data.examId;
+            document.getElementById('display-id-number').textContent = data.nationalId;
+            document.getElementById('display-name').textContent = data.name;
+            document.getElementById('display-type').textContent = data.examType;
+            document.getElementById('display-exam-id').textContent = data.examId;
+            document.getElementById('display-location').textContent = data.location;
+            document.getElementById('display-room').textContent = data.room;
+            document.getElementById('display-seat').textContent = data.seatNumber;
+
+            // Update table at the bottom
+            document.getElementById('table-exam-id').textContent = data.examId;
+            document.getElementById('table-room').textContent = data.room;
+            document.getElementById('table-seat').textContent = data.seatNumber;
+
+            examCardWrapper.classList.remove('hidden');
+            printSection.classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' }); // เลื่อนกลับขึ้นด้านบน
+        }
+
+        // กด Enter ที่ช่องกรอกเลขบัตรฯ ให้ทำงานเหมือนกดค้นหา
+        idInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                fetchExamData();
+            }
+        });
+        
+    </script>
+</body>
+</html>
